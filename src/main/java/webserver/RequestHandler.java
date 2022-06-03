@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,21 +38,30 @@ public class RequestHandler extends Thread {
             List<Pair> headers = parseHeaders(br);
 
             if (requestMethod.equals("POST") && requestURL.startsWith("/user/create")) {
-                int contentLength = headers.stream()
-                        .filter(header -> header.getKey().equals("Content-Length"))
-                        .map(header -> Integer.parseInt(header.getValue()))
-                        .findAny()
-                        .orElse(0);
-
-                String bodyData = IOUtils.readData(br, contentLength);
-                Map<String, String> queryString = parseQueryString(bodyData);
+                Map<String, String> queryString = createQueryString(headers, br);
                 User user = new User(queryString.get("userId"),
                         queryString.get("password"),
                         queryString.get("name"),
                         queryString.get("email"));
+                DataBase.addUser(user);
 
                 DataOutputStream dos = new DataOutputStream(out);
-                response302Header(dos);
+                response302Header(dos, "/index.html");
+                return;
+            }
+
+            if (requestMethod.equals("POST") && requestURL.startsWith("/user/login")) {
+                Map<String, String> queryString = createQueryString(headers, br);
+                String userId = queryString.get("userId");
+                User user = DataBase.findUserById(userId);
+                if (user == null || !user.matchPassword(queryString.get("password"))) {
+                    DataOutputStream dos = new DataOutputStream(out);
+                    response302HeaderWithCookie(dos, "/user/login_failed.html", "logined=false");
+                } else {
+                    DataOutputStream dos = new DataOutputStream(out);
+                    response302HeaderWithCookie(dos, "/index.html", "logined=true");
+                    addCookie(dos, "logined=true");
+                }
                 return;
             }
 
@@ -67,6 +77,7 @@ public class RequestHandler extends Thread {
             byte[] body = "Hello World!!".getBytes();
             response200Header(dos, body.length);
             responseBody(dos, body);
+
         } catch (IOException e) {
             log.error(e.getMessage());
         }
@@ -85,6 +96,26 @@ public class RequestHandler extends Thread {
         return headers;
     }
 
+    private Map<String, String> createQueryString(List<Pair> headers, BufferedReader br) throws IOException {
+        int contentLength = headers.stream()
+                .filter(header -> header.getKey().equals("Content-Length"))
+                .map(header -> Integer.parseInt(header.getValue()))
+                .findAny()
+                .orElse(0);
+
+        String bodyData = IOUtils.readData(br, contentLength);
+        Map<String, String> queryString = parseQueryString(bodyData);
+        return queryString;
+    }
+
+    private void addCookie(DataOutputStream dos, String cookie) {
+        try {
+            dos.writeBytes("Set-Cookie: " + cookie + "\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
         try {
             dos.writeBytes("HTTP/1.1 200 OK \r\n");
@@ -96,10 +127,21 @@ public class RequestHandler extends Thread {
         }
     }
 
-    private void response302Header(DataOutputStream dos) {
+    private void response302Header(DataOutputStream dos, String location) {
         try {
             dos.writeBytes("HTTP/1.1 302 Found \r\n");
-            dos.writeBytes("Location: /index.html" + "\r\n");
+            dos.writeBytes("Location: " + location + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302HeaderWithCookie(DataOutputStream dos, String location, String cookie) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: " + location + "\r\n");
+            dos.writeBytes("Set-Cookie: " + cookie + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
