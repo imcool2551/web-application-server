@@ -3,9 +3,12 @@ package webserver;
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Map;
 
+import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import util.HttpRequestUtils;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -23,13 +26,23 @@ public class RequestHandler extends Thread {
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             // TODO 사용자 요청에 대한 처리는 이 곳에 구현하면 된다.
             BufferedReader br = new BufferedReader(new InputStreamReader(in));
-            String line = br.readLine();
-            String requestMethod = line.split(" ")[0];
-            String requestURL = line.split(" ")[1];
+            String firstLine = br.readLine();
+            logHeaders(br);
 
-            while (line != null && !"".equals(line)) {
-                log.info(line);
-                line = br.readLine();
+            String requestMethod = firstLine.split(" ")[0];
+            String requestURL = firstLine.split(" ")[1];
+
+            if (requestMethod.equals("GET") && requestURL.startsWith("/user/create")) {
+                String params = requestURL.substring(requestURL.indexOf("?") + 1);
+                Map<String, String> queryString = HttpRequestUtils.parseQueryString(params);
+                User user = new User(queryString.get("userId"),
+                        queryString.get("password"),
+                        queryString.get("name"),
+                        queryString.get("email"));
+
+                DataOutputStream dos = new DataOutputStream(out);
+                response302Header(dos);
+                return;
             }
 
             if (requestMethod.equals("GET")) {
@@ -49,11 +62,29 @@ public class RequestHandler extends Thread {
         }
     }
 
+    private void logHeaders(BufferedReader br) throws IOException {
+        String headerLine = br.readLine();
+        while (headerLine != null && !headerLine.equals("")) {
+            log.info(headerLine);
+            headerLine = br.readLine();
+        }
+    }
+
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
         try {
             dos.writeBytes("HTTP/1.1 200 OK \r\n");
             dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302Header(DataOutputStream dos) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: /index.html" + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());

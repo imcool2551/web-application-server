@@ -2,10 +2,13 @@ package util;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+
+import static java.util.stream.Collectors.*;
 
 public class HttpRequestUtils {
     /**
@@ -32,8 +35,10 @@ public class HttpRequestUtils {
         }
 
         String[] tokens = values.split(separator);
-        return Arrays.stream(tokens).map(t -> getKeyValue(t, "=")).filter(p -> p != null)
-                .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
+        return Arrays.stream(tokens)
+                .map(t -> getKeyValue(t, "="))
+                .filter(Objects::nonNull)
+                .collect(toMap(Pair::getKey, Pair::getValue));
     }
 
     static Pair getKeyValue(String keyValue, String regex) {
