@@ -6,7 +6,9 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.google.common.base.Strings;
 import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
@@ -61,6 +63,32 @@ public class RequestHandler extends Thread {
                     DataOutputStream dos = new DataOutputStream(out);
                     response302HeaderWithCookie(dos, "/index.html", "logined=true");
                     addCookie(dos, "logined=true");
+                }
+                return;
+            }
+
+            if (requestMethod.equals("GET") && requestURL.equals("/user/list")) {
+                String cookies = headers.stream()
+                        .filter(header -> header.getKey().equals("Cookie"))
+                        .map(Pair::getValue)
+                        .findAny()
+                        .orElse("");
+
+                boolean logined = Boolean.parseBoolean(parseCookies(cookies).get("logined"));
+                if (logined) {
+                    DataOutputStream dos = new DataOutputStream(out);
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("<ul>");
+                    DataBase.findAll()
+                            .stream()
+                            .map(user -> String.format("<li>%s</li>", user.getName()))
+                            .forEach(sb::append);
+                    sb.append("</ul>");
+                    response200Header(dos, sb.length());
+                    responseBody(dos, sb.toString().getBytes());
+                } else {
+                    DataOutputStream dos = new DataOutputStream(out);
+                    response302Header(dos, "/user/login.html");
                 }
                 return;
             }
